@@ -177,13 +177,3 @@ def run(parentMaterial, end):
     print("Simulation time:", end - start)
 
     return outputDF
-
-
-# %%
-# Test run
-
-PM = particle(1e4, 100, 100, 2.3)  # units of sides are meters. Density units
-# are g/cm^3 or metric ton/m^3
-testOutput = run(parentMaterial=PM, end=30)  # Arbitrary unit for time step
-'''After solving the RAM problem, I found that this takes an enormous amount
-of time to run the model only once, if each run has 30 time steps.'''
