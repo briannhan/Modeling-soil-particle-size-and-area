@@ -81,16 +81,21 @@ def divideParticles(oldParticles):
 
     Returns
     -------
-    A new list of divided particles at this time step
+    A new tuple of divided particles at this time step, representing the new
+    soil profile, and the amount of time it takes the model to create this new
+    soil profile to measure model performance.
 
     """
+    start = time()
     newParticles = ()  # empty tuple
     for item in oldParticles:
         dividedParticles = item.divide()  # Since it returns multiple items
         # but the items are not each assigned a name, these items are put into
         # a single tuple. Hence, this method now returns a single tuple
         newParticles = newParticles + dividedParticles
-    return newParticles
+    end = time()
+    profileCreationTime = end - start
+    return newParticles, profileCreationTime
 
 
 def characteristics(particles):
@@ -111,10 +116,13 @@ def characteristics(particles):
 
     Returns
     -------
-    Specific surface area of the whole soil profile and the average volume of
-    individual, new, soil particles.
+    Characteristics of the new soil profile: specific surface area (total
+    surface area of all soil particles), mean particle volume, number of
+    particles. Also outputs the amount of time it takes to perform these
+    calculations as a means of measuring model performance.
 
     """
+    start = time()
     numOfParticles = len(particles)
     SAarray = np.array([])
     volumeArray = np.array([])
@@ -123,10 +131,9 @@ def characteristics(particles):
         volumeArray = np.append(volumeArray, particle.volume)
     specificSA = np.sum(SAarray)
     meanVolume = np.mean(volumeArray)
-    volumeStd = np.std(volumeArray)
-    # assert volumeStd == 0  # Making sure that the volume of each particle is
-    # identical
-    return specificSA, meanVolume, numOfParticles
+    end = time()
+    calculationTime = end - start
+    return specificSA, meanVolume, numOfParticles, calculationTime
 
 
 def run(parentMaterial, end):
@@ -149,31 +156,62 @@ def run(parentMaterial, end):
     profile created at the end of each time step.
 
     """
-    start = time()
-
     # Creating the empty output dataframe to be filled in later
     timeSteps = np.arange(1, end + 1)
     emptySpecificSA = np.zeros(end)
     emptyVolume = np.zeros(end)
     emptyPartNum = np.zeros(end)
-    outputDF = pd.DataFrame({"timeStep": timeSteps,
-                             "numberOfParticles": emptyPartNum,
-                             "specificSurfaceArea": emptySpecificSA,
-                             "particleVolume": emptyVolume})
+    creationTimeArray = np.zeros(end)
+    calculationTimeArray = np.zeros(end)
+    dfFormat = {"timeStep": timeSteps, "numberOfParticles": emptyPartNum,
+                "specificSurfaceArea": emptySpecificSA,
+                "particleVolume": emptyVolume,
+                "modelCreationTime": creationTimeArray,
+                "modelCalculationTime": calculationTimeArray}
+    outputDF = pd.DataFrame(data=dfFormat)
 
     # Populating the dataframe with characteristics of the new soil profile
     # after each time step
-    oldProfile = [parentMaterial]
+    oldProfile = (parentMaterial,)
     for index, row in outputDF.iterrows():
-        newProfile = divideParticles(oldProfile)
-        specificSA, particleVolume, num = characteristics(newProfile)
+        newProfile, creationTime = divideParticles(oldProfile)
+        specificSA, particleVolume, num, calcTime = characteristics(newProfile)
+
+        # Puts in characteristics of the soil profile created at a time step
         outputDF.loc[index, "specificSurfaceArea"] = specificSA
         outputDF.loc[index, "particleVolume"] = particleVolume
         outputDF.loc[index, "numberOfParticles"] = num
         oldProfile = newProfile
 
-    # Calculating and printing simulation time
-    end = time()
-    print("Simulation time:", end - start)
+        # Puts in times used to create and calculate the characteristics of
+        # the soil profile to measure model performance
+        outputDF.loc[index, "modelCreationTime"] = creationTime
+        '''The amount of time it takes the model to create this particular
+        soil profile.'''
+        cumuCreationTime = outputDF["modelCreationTime"].sum()
+        '''Calculates the total amount of time it takes the model to create all
+        the soil profiles up till now. Sums up the creation time from the
+        initial time step all the way to this current time step that's being
+        looped through'''
+        outputDF.loc[index, "cumuCreationTime"] = cumuCreationTime
+
+        outputDF.loc[index, "modelCalculationTime"] = calcTime
+        '''The amount of time it takes the model to perform calculations on
+        this particular soil profile.'''
+        cumuCalcTime = outputDF["modelCalculationTime"].sum()
+        '''Calculates the total amount of time it takes the model to perform
+        calculations for all soil profiles from the initial time step to the
+        one that's being looped through.'''
+        outputDF.loc[index, "cumuCalcTime"] = cumuCalcTime
+
+        outputDF.loc[index, "modelTime"] = creationTime + calcTime
+        '''Calculates the total amount of time it takes the model to work
+        through this new profile, from creating it to performing calculations
+        on it.'''
+        cumuModelTime = outputDF["modelTime"].sum(skipna=True)
+        '''Calculates the amount of time it takes the model to create all the
+        soil profiles up to the one that's being looped through and perform
+        calculations on them.'''
+        outputDF.loc[index, "cumuModelTime"] = cumuModelTime
 
     return outputDF
